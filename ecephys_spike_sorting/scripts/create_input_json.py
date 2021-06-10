@@ -21,6 +21,7 @@ def createInputJson(output_file,
                     lfp_directory=None,
                     kilosort_output_directory=None, 
                     kilosort_output_tmp=None, 
+                    trange = '[0 inf]',
                     probe_type='3A'):
 
     if kilosort_output_directory is None \
@@ -122,7 +123,7 @@ def createInputJson(output_file,
             "air_gap" : 100,
             "time_interval" : 5,
             "skip_s_per_pass" : 100,
-            "start_time" : 150
+            "start_time" : 150,
         }, 
 
         "median_subtraction_params" : {
@@ -148,7 +149,8 @@ def createInputJson(output_file,
                 "minFR" : 1/50.,
                 "momentum" : '[20 400]',
                 "sigmaMask" : 30,
-                "ThPre" : 8
+                "ThPre" : 8,
+                "trange": trange
             }
         },
 
