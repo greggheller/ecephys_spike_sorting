@@ -63,7 +63,13 @@ class processing_session():
 
         self.sharing_backup = get_from_kwargs('sharing_backup', kwargs, False)
 
-        self.force = get_from_kwargs('force', kwargs)
+        self.force = get_from_kwargs('force', kwargs, False)
+
+        self.lower = get_from_kwargs('lower', kwargs, False)
+
+        self.ctx_surface_max = get_from_kwargs('ctx_surface_max', kwargs, 350)
+        self.ctx_surface_min = get_from_kwargs('ctx_surface_min', kwargs, 80)
+        self.ctx_num_channels = get_from_kwargs('ctx_num_channels', kwargs, 80)
 
 
 
@@ -737,7 +743,25 @@ class processing_session():
 
                 #############################
 
-
+                trange = '[0 inf]'
+                if self.extended_short_data or self.lower:
+                    if self.lower:
+                        try:
+                            start = min(max(0, self.file_length_s-8*60), 17.5*60)
+                            trange = '['+str(start)+' '+str(self.file_length_s)+']'
+                        except Exception as E:
+                            try:
+                                start = 17.5*60
+                                trange = '['+str(start)+' inf]'
+                            except Exception as E:
+                                self.logger_dict[probe].error("Error setting trange for short sort")
+                                self.logger_dict[probe].exception(E)
+                    else:
+                        try:
+                            trange = '[0 '+str(self.file_length_s)+']'
+                        except Exception as E:
+                            self.logger_dict[probe].error("Error setting trange for short sort")
+                            self.logger_dict[probe].exception(E)
 
                 info = createInputJson(
                     output_file=input_json, 
@@ -745,14 +769,10 @@ class processing_session():
                     extracted_data_directory=self.extracted_path_head(probe),
                     lfp_directory = self.sorted_LFP_path(probe),
                     kilosort_output_directory=self.sorted_AP_path(probe), 
+                    trange = trange,
                     probe_type=self.probe_type
                 )
-                if self.extended_short_data:
-                    try:
-                        info['kilosort_helper_params']['kilosort2_params']['trange'] = '[0 '+str(self.file_length_s)+']'
-                    except Exeption as E:
-                        self.logger_dict[probe].error("Error setting trange for short sort")
-                        self.logger_dict[probe].exception(E)
+
 
                 command_string = "python -W ignore -m ecephys_spike_sorting.modules." + next_module + " --input_json " + input_json \
                   + " --output_json " + output_json
@@ -1134,13 +1154,19 @@ class processing_session():
                         surface_channel = 300
                         logging.error('Failed to retrieve surface channel', exc_info=True)
                     for channel in range(384):
+                        max_surface_channel = self.ctx_surface_max
+                        surface_channel = min(max_surface_channel, surface_channel)
+                        min_surface_channel = self.ctx_surface_min
+                        surface_channel = max(min_surface_channel, surface_channel)
+                        #make sure it stays within bounds
                         max_chan = min(383, surface_channel+50)
-                        min_chan = min(surface_channel-80, 250)
+                        min_chan = max(surface_channel-self.ctx_num_channels, 0)
                         if not(channel in range(min_chan, max_chan)):
                             mask[channel] = False
                 edit_mask(probe, mask, 'kilosort')
             except Exception as E:
                 logging.error('Failed to edit mask for kilosort', exc_info=True)
+
 
 
         def edit_mask_for_depth_estimation(probe, old_probe_json):
@@ -1179,6 +1205,10 @@ class processing_session():
                     mask = 384*[True]
                 if sum(not(channel) for channel in mask)>0:
                     mask = 384*[True]
+                if 'air_channel' in probe_json and 'surface_channel' in probe_json:
+                    if probe_json['air_channel'] - probe_json['surface_channel'] > 50:
+                        for chan in range(int(probe_json['air_channel']),384):
+                            mask[chan] = False
                 references = [191]
                 for ref in references:
                     mask[ref] = False
